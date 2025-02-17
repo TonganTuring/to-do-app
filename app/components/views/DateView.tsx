@@ -13,9 +13,6 @@ interface DateViewProps {
   handleEditSubmit: (id: number) => void;
   handleEditInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   startEditing: (todo: Todo) => void;
-  showPriorityOptions: boolean;
-  showCategoryOptions: boolean;
-  showDateOptions: boolean;
 }
 
 export default function DateView({
@@ -30,9 +27,6 @@ export default function DateView({
   handleEditSubmit,
   handleEditInputChange,
   startEditing,
-  showPriorityOptions,
-  showCategoryOptions,
-  showDateOptions,
 }: DateViewProps) {
   const today = new Date();
   const next7Days = addDays(today, 7);

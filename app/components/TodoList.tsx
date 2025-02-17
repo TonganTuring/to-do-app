@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import Sidebar from './Sidebar';
 import TaskDetails from './TaskDetails';
-import { parse, addDays, addWeeks, addMonths, isValid, parseISO } from 'date-fns';
 import DateView from './views/DateView';
 import CategoryView from './views/CategoryView';
 import ArchiveView from './views/ArchiveView';
@@ -23,15 +22,6 @@ const slideUpVariants = {
   open: 'max-h-[1000px] opacity-100',
   closed: 'max-h-0 opacity-0'
 };
-
-const CATEGORIES = {
-  'My God': 'green',
-  'Myself': 'yellow',
-  'My People': 'orange',
-  'My Work': 'red',
-  'Maintenance': 'blue',
-  'Unassigned': 'gray'
-} as const;
 
 export default function TodoList() {
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -877,9 +867,6 @@ export default function TodoList() {
             handleEditSubmit={handleEditSubmit}
             handleEditInputChange={handleEditInputChange}
             startEditing={startEditing}
-            showPriorityOptions={showPriorityOptions}
-            showCategoryOptions={showCategoryOptions}
-            showDateOptions={showDateOptions}
           />
         );
       default:
