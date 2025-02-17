@@ -1,37 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Life-Focused Todo App
 
-## Getting Started
+A thoughtfully designed todo application that organizes tasks around the four fundamental areas of life:
 
-First, run the development server:
+- **My God** - Spiritual growth and faith-related activities
+- **Myself** - Personal development and self-care
+- **My People** - Relationships, family, and community
+- **My Work** - Career, projects, and professional responsibilities
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- Organize tasks into life-focused categories
+  - Easily categorize tasks into the four life areas to maintain balance
+  - Each category has a distinct visual identity for quick recognition
+  - Filter and view tasks by category to focus on specific life areas
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Set priority levels (High, Medium, Low)
+  - Assign importance to tasks with a three-tier priority system
+  - High priority tasks are highlighted for immediate attention
+  - Sort tasks by priority to tackle the most important items first
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Quick-add commands using shortcuts:
+  - Categories: `~g` (God), `~m` (Myself), `~p` (People), `~w` (Work)
+    - Rapidly assign categories while creating tasks
+    - Natural shortcut keys that match category names
+  - Priorities: `!h` (High), `!m` (Medium), `!l` (Low)
+    - Quickly set task priorities using intuitive commands
+    - Consistent syntax for easy memorization
 
-## Learn More
+- Visual organization with color-coded categories
+  - Each life area has a distinct color scheme
+  - Colors help visually group related tasks
+  - Improves task recognition and organization at a glance
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# to-do-app
+- Multiple views: Inbox, Priorities, and Categories
+  - Inbox: See all tasks in a unified view
+  - Priorities: Focus on tasks by importance level
+  - Categories: Group tasks by life areas for balanced attention
