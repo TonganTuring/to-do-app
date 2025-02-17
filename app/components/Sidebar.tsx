@@ -1,6 +1,6 @@
 import React from 'react';
 
-type View = 'inbox' | 'priorities' | 'categories' | 'date';
+type View = 'inbox' | 'priorities' | 'categories' | 'date' | 'archive';
 
 interface SidebarProps {
   currentView: View;
@@ -11,7 +11,7 @@ export default function Sidebar({ currentView, onViewChange }: SidebarProps) {
   return (
     <div className="w-64 h-full border-r border-gray-200 dark:border-gray-800 p-4">
       <nav className="space-y-2">
-        {(['inbox', 'priorities', 'categories', 'date'] as View[]).map((view) => (
+        {(['inbox', 'priorities', 'categories', 'date', 'archive'] as View[]).map((view) => (
           <button
             key={view}
             onClick={() => onViewChange(view)}

@@ -3,6 +3,11 @@
 import { useState } from 'react';
 import Sidebar from './Sidebar';
 import TaskDetails from './TaskDetails';
+import { parse, addDays, addWeeks, addMonths, isValid, parseISO } from 'date-fns';
+import DateView from './views/DateView';
+import CategoryView from './views/CategoryView';
+import ArchiveView from './views/ArchiveView';
+import { parseDateExpression } from '../utils/dateUtils';
 
 interface Todo {
   id: number;
@@ -10,7 +15,8 @@ interface Todo {
   completed: boolean;
   priority: 'High' | 'Medium' | 'Low' | 'Unassigned';
   category: 'My God' | 'Myself' | 'My People' | 'My Work' | 'Maintenance' | 'Unassigned';
-  dueDate?: string;
+  dueDate: string | null;
+  archivedAt: string | null;
 }
 
 const slideUpVariants = {
@@ -34,13 +40,23 @@ export default function TodoList() {
   const [newCategory, setNewCategory] = useState<Todo['category']>('Unassigned');
   const [showPriorityOptions, setShowPriorityOptions] = useState(false);
   const [showCategoryOptions, setShowCategoryOptions] = useState(false);
+  const [showDateOptions, setShowDateOptions] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
-  const [currentView, setCurrentView] = useState<'inbox' | 'priorities' | 'categories' | 'date'>('inbox');
+  const [currentView, setCurrentView] = useState<'inbox' | 'priorities' | 'categories' | 'date' | 'archive'>('inbox');
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [editingTodo, setEditingTodo] = useState<number | null>(null);
+  const [editText, setEditText] = useState('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setNewTodo(value);
+
+    // Check for date command
+    if (value.includes('*')) {
+      setShowDateOptions(true);
+    } else {
+      setShowDateOptions(false);
+    }
 
     // Check for priority command
     if (value.includes('!')) {
@@ -87,32 +103,106 @@ export default function TodoList() {
     }
   };
 
-  const addTodo = (e: React.FormEvent) => {
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEditText(value);
+
+    // Check for date command
+    if (value.includes('*')) {
+      setShowDateOptions(true);
+    } else {
+      setShowDateOptions(false);
+    }
+
+    // Check for priority command
+    if (value.includes('!')) {
+      const priorityText = value.toLowerCase().split('!')[1];
+      if (priorityText.startsWith('h')) {
+        setNewPriority('High');
+        setEditText(value.replace(/!h\w*/, '').trim());
+      } else if (priorityText.startsWith('m')) {
+        setNewPriority('Medium');
+        setEditText(value.replace(/!m\w*/, '').trim());
+      } else if (priorityText.startsWith('l')) {
+        setNewPriority('Low');
+        setEditText(value.replace(/!l\w*/, '').trim());
+      }
+      setShowPriorityOptions(true);
+    } else {
+      setShowPriorityOptions(false);
+    }
+
+    // Check for category command
+    if (value.includes('~')) {
+      const categoryText = value.toLowerCase().split('~')[1];
+      if (categoryText.startsWith('g')) {
+        setNewCategory('My God');
+        setEditText(value.replace(/~g\w*/, '').trim());
+      } else if (categoryText.startsWith('m') && categoryText.length > 1) {
+        if (categoryText[1] === 'a') {
+          setNewCategory('Maintenance');
+          setEditText(value.replace(/~ma\w*/, '').trim());
+        } else {
+          setNewCategory('Myself');
+          setEditText(value.replace(/~m\w*/, '').trim());
+        }
+      } else if (categoryText.startsWith('p')) {
+        setNewCategory('My People');
+        setEditText(value.replace(/~p\w*/, '').trim());
+      } else if (categoryText.startsWith('w')) {
+        setNewCategory('My Work');
+        setEditText(value.replace(/~w\w*/, '').trim());
+      }
+      setShowCategoryOptions(true);
+    } else {
+      setShowCategoryOptions(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newTodo.trim() === '') return;
-    
-    setTodos([
-      ...todos,
-      {
-        id: Date.now(),
-        text: newTodo.trim(),
-        completed: false,
-        priority: newPriority,
-        category: newCategory,
-        dueDate: 'Today', // You can make this dynamic
-      },
-    ]);
+    if (!newTodo.trim()) return;
+
+    let dueDate: Date | null = null;
+    let todoText = newTodo;
+
+    // Check for date pattern anywhere in the text
+    const dateMatch = todoText.match(/\*([\w\s]+)/);
+    if (dateMatch) {
+      const datePart = dateMatch[1].trim();
+      dueDate = parseDateExpression(datePart);
+      todoText = todoText.replace(/\*[\w\s]+/, '').trim();
+    }
+
+    const newTodoItem = {
+      id: Date.now(),
+      text: todoText,
+      completed: false,
+      priority: newPriority,
+      category: newCategory,
+      dueDate: dueDate ? dueDate.toISOString() : null,
+      archivedAt: null,
+    };
+
+    setTodos([...todos, newTodoItem]);
     setNewTodo('');
     setNewPriority('Unassigned');
     setNewCategory('Unassigned');
     setShowPriorityOptions(false);
     setShowCategoryOptions(false);
+    setShowDateOptions(false);
   };
 
   const toggleTodo = (id: number) => {
     setTodos(
       todos.map((todo) =>
-        todo.id === id ? { ...todo, completed: !todo.completed } : todo
+        todo.id === id
+          ? {
+              ...todo,
+              completed: !todo.completed,
+              archivedAt: !todo.completed ? new Date().toISOString() : null,
+            }
+          : todo
       )
     );
   };
@@ -174,16 +264,90 @@ export default function TodoList() {
     }));
   };
 
+  const startEditing = (todo: Todo) => {
+    setEditingTodo(todo.id);
+    setEditText(todo.text);
+    setNewPriority(todo.priority);
+    setNewCategory(todo.category);
+  };
+
+  const handleEditSubmit = (id: number) => {
+    setTodos(todos.map(todo => {
+      if (todo.id === id) {
+        let dueDate: Date | null = null;
+        let todoText = editText;
+
+        // Check for date pattern anywhere in the text
+        const dateMatch = todoText.match(/\*([\w\s]+)/);
+        if (dateMatch) {
+          const datePart = dateMatch[1].trim();
+          dueDate = parseDateExpression(datePart);
+          todoText = todoText.replace(/\*[\w\s]+/, '').trim();
+        }
+
+        return {
+          ...todo,
+          text: todoText,
+          priority: newPriority,
+          category: newCategory,
+          dueDate: dueDate ? dueDate.toISOString() : todo.dueDate,
+        };
+      }
+      return todo;
+    }));
+    
+    setEditingTodo(null);
+    setEditText('');
+    setNewPriority('Unassigned');
+    setNewCategory('Unassigned');
+    setShowPriorityOptions(false);
+    setShowCategoryOptions(false);
+    setShowDateOptions(false);
+  };
+
+  const updateTodo = (id: number, updates: Partial<Todo>) => {
+    setTodos(todos.map(todo => 
+      todo.id === id ? { ...todo, ...updates } : todo
+    ));
+  };
+
+  const getLatestTodo = (todoId: number | null) => {
+    if (!todoId) return null;
+    return todos.find(t => t.id === todoId) || null;
+  };
+
   const renderTasks = () => {
     switch (currentView) {
+      case 'archive':
+        return (
+          <ArchiveView
+            todos={todos}
+            onToggle={toggleTodo}
+            onDelete={deleteTodo}
+            onSelect={setSelectedTodo}
+            getPriorityColor={getPriorityColor}
+            getCategoryColor={getCategoryColor}
+          />
+        );
       case 'inbox':
+        const inboxTodos = todos.filter(todo => 
+          !todo.archivedAt &&
+          (todo.priority === 'Unassigned' || 
+          todo.category === 'Unassigned' || 
+          todo.dueDate === null)
+        );
+        
         return (
           <div className="space-y-4">
-            {todos.map((todo) => (
+            {inboxTodos.map((todo) => (
               <li
                 key={todo.id}
-                onClick={() => setSelectedTodo(todo)}
-                className={`flex items-center gap-3 p-3 group transition-colors ${getPriorityColor(todo.priority)} rounded-lg cursor-pointer`}
+                onClick={(e) => {
+                  if (!(e.target as HTMLElement).closest('button, input')) {
+                    setSelectedTodo(todo);
+                  }
+                }}
+                className={`flex items-center gap-3 p-3 group transition-colors ${getPriorityColor(todo.priority)} rounded-lg cursor-pointer relative`}
               >
                 <input
                   type="checkbox"
@@ -191,16 +355,211 @@ export default function TodoList() {
                   onChange={() => toggleTodo(todo.id)}
                   className="w-4 h-4 border-2 border-gray-300 rounded-md checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
                 />
-                <span className={`flex-1 text-sm text-white ${todo.completed ? 'line-through text-gray-300' : ''}`}>
-                  {todo.text}
-                </span>
-                <div className="flex items-center gap-3 text-xs">
+                {editingTodo === todo.id ? (
+                  <div className="flex-1 relative">
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleEditSubmit(todo.id);
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={editText}
+                        onChange={handleEditInputChange}
+                        onBlur={() => handleEditSubmit(todo.id)}
+                        autoFocus
+                        className="w-full px-2 py-1 bg-transparent text-sm text-white border-b border-white/20 focus:outline-none focus:border-white/40"
+                      />
+                    </form>
+                    {showPriorityOptions && (
+                      <div className="fixed mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 border border-gray-200 dark:border-gray-700 animate-fadeIn">
+                        <div className="text-sm text-white-500">
+                          Priority Options:
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewPriority('High');
+                                setShowPriorityOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-green-200 hover:bg-green-300 dark:bg-green-900/70 dark:hover:bg-green-800/70 transition-colors"
+                            >
+                              High
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewPriority('Medium');
+                                setShowPriorityOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-yellow-200 hover:bg-yellow-300 dark:bg-yellow-900/70 dark:hover:bg-yellow-800/70 transition-colors"
+                            >
+                              Medium
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewPriority('Low');
+                                setShowPriorityOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-red-200 hover:bg-red-300 dark:bg-red-900/70 dark:hover:bg-red-800/70 transition-colors"
+                            >
+                              Low
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {showCategoryOptions && (
+                      <div className="fixed mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 border border-gray-200 dark:border-gray-700 animate-fadeIn">
+                        <div className="text-sm text-white-500">
+                          Category Options:
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewCategory('My God');
+                                setShowCategoryOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-green-600/70 hover:bg-green-600/80 text-white transition-colors"
+                            >
+                              My God
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewCategory('Myself');
+                                setShowCategoryOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-yellow-600/70 hover:bg-yellow-600/80 text-white transition-colors"
+                            >
+                              Myself
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewCategory('My People');
+                                setShowCategoryOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-orange-600/70 hover:bg-orange-600/80 text-white transition-colors"
+                            >
+                              My People
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewCategory('My Work');
+                                setShowCategoryOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-red-600/70 hover:bg-red-600/80 text-white transition-colors"
+                            >
+                              My Work
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewCategory('Maintenance');
+                                setShowCategoryOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                            >
+                              Maintenance
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewCategory('Unassigned');
+                                setShowCategoryOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-gray-600/70 hover:bg-gray-600/80 text-white transition-colors"
+                            >
+                              Unassigned
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {showDateOptions && (
+                      <div className="fixed mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 border border-gray-200 dark:border-gray-700 animate-fadeIn">
+                        <div className="text-sm text-white-500">
+                          Date Options:
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewTodo((prev) => {
+                                  const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                                  return `${withoutDate} *today`.trim();
+                                });
+                                setShowDateOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                            >
+                              Today
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewTodo((prev) => {
+                                  const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                                  return `${withoutDate} *tomorrow`.trim();
+                                });
+                                setShowDateOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                            >
+                              Tomorrow
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewTodo((prev) => {
+                                  const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                                  return `${withoutDate} *next week`.trim();
+                                });
+                                setShowDateOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                            >
+                              Next Week
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewTodo((prev) => {
+                                  const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                                  return `${withoutDate} *next month`.trim();
+                                });
+                                setShowDateOptions(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                            >
+                              Next Month
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span 
+                    className={`flex-1 text-sm text-white ${todo.completed ? 'line-through text-gray-300' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEditing(todo);
+                    }}
+                  >
+                    {todo.text}
+                  </span>
+                )}
+                <div className="flex items-center gap-3 text-xs pr-8">
                   <span className={`flex items-center gap-1.5 text-gray-300 ${getCategoryColor(todo.category)} px-2 py-1 rounded-md`}>
                     {todo.category}
                   </span>
                   {todo.dueDate && (
                     <span className="text-blue-300 bg-black/30 px-2 py-1 rounded-md">
-                      {todo.dueDate}
+                      {new Date(todo.dueDate).toLocaleDateString()}
                     </span>
                   )}
                 </div>
@@ -209,7 +568,7 @@ export default function TodoList() {
                     e.stopPropagation();
                     deleteTodo(todo.id);
                   }}
-                  className="hidden group-hover:block px-2 py-1 text-gray-300 hover:text-red-300 transition-colors"
+                  className="opacity-0 group-hover:opacity-100 absolute right-3 px-2 py-1 text-gray-300 hover:text-red-300 transition-opacity"
                 >
                   ×
                 </button>
@@ -236,7 +595,7 @@ export default function TodoList() {
                       {priority === 'Unassigned' ? 'Unassigned' : `${priority} Priority`}
                     </h2>
                     <span className="text-sm text-gray-300">
-                      {groupedTodos[priority as Todo['priority']]?.length || 0}
+                      {groupedTodos[priority as Todo['priority']]?.filter(todo => !todo.archivedAt).length || 0}
                     </span>
                   </div>
                 </div>
@@ -246,10 +605,17 @@ export default function TodoList() {
                     ? slideUpVariants.closed
                     : slideUpVariants.open
                 }`}>
-                  {groupedTodos[priority as Todo['priority']]?.map((todo) => (
+                  {groupedTodos[priority as Todo['priority']]
+                    ?.filter(todo => !todo.archivedAt)
+                    .map((todo) => (
                     <li
                       key={todo.id}
-                      className={`flex items-center gap-3 p-3 group transition-colors ${getPriorityColor(todo.priority)} rounded-lg`}
+                      onClick={(e) => {
+                        if (!(e.target as HTMLElement).closest('button, input, span')) {
+                          setSelectedTodo(todo);
+                        }
+                      }}
+                      className={`flex items-center gap-3 p-3 group transition-colors ${getPriorityColor(todo.priority)} rounded-lg cursor-pointer relative`}
                     >
                       <input
                         type="checkbox"
@@ -257,16 +623,211 @@ export default function TodoList() {
                         onChange={() => toggleTodo(todo.id)}
                         className="w-4 h-4 border-2 border-gray-300 rounded-md checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
                       />
-                      <span className={`flex-1 text-sm text-white ${todo.completed ? 'line-through text-gray-300' : ''}`}>
-                        {todo.text}
-                      </span>
-                      <div className="flex items-center gap-3 text-xs">
+                      {editingTodo === todo.id ? (
+                        <div className="flex-1 relative">
+                          <form 
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              handleEditSubmit(todo.id);
+                            }}
+                          >
+                            <input
+                              type="text"
+                              value={editText}
+                              onChange={handleEditInputChange}
+                              onBlur={() => handleEditSubmit(todo.id)}
+                              autoFocus
+                              className="w-full px-2 py-1 bg-transparent text-sm text-white border-b border-white/20 focus:outline-none focus:border-white/40"
+                            />
+                          </form>
+                          {showPriorityOptions && (
+                            <div className="fixed mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 border border-gray-200 dark:border-gray-700 animate-fadeIn">
+                              <div className="text-sm text-white-500">
+                                Priority Options:
+                                <div className="flex gap-2 mt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewPriority('High');
+                                      setShowPriorityOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-green-200 hover:bg-green-300 dark:bg-green-900/70 dark:hover:bg-green-800/70 transition-colors"
+                                  >
+                                    High
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewPriority('Medium');
+                                      setShowPriorityOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-yellow-200 hover:bg-yellow-300 dark:bg-yellow-900/70 dark:hover:bg-yellow-800/70 transition-colors"
+                                  >
+                                    Medium
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewPriority('Low');
+                                      setShowPriorityOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-red-200 hover:bg-red-300 dark:bg-red-900/70 dark:hover:bg-red-800/70 transition-colors"
+                                  >
+                                    Low
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {showCategoryOptions && (
+                            <div className="fixed mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 border border-gray-200 dark:border-gray-700 animate-fadeIn">
+                              <div className="text-sm text-white-500">
+                                Category Options:
+                                <div className="flex gap-2 mt-2 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewCategory('My God');
+                                      setShowCategoryOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-green-600/70 hover:bg-green-600/80 text-white transition-colors"
+                                  >
+                                    My God
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewCategory('Myself');
+                                      setShowCategoryOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-yellow-600/70 hover:bg-yellow-600/80 text-white transition-colors"
+                                  >
+                                    Myself
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewCategory('My People');
+                                      setShowCategoryOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-orange-600/70 hover:bg-orange-600/80 text-white transition-colors"
+                                  >
+                                    My People
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewCategory('My Work');
+                                      setShowCategoryOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-red-600/70 hover:bg-red-600/80 text-white transition-colors"
+                                  >
+                                    My Work
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewCategory('Maintenance');
+                                      setShowCategoryOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                                  >
+                                    Maintenance
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewCategory('Unassigned');
+                                      setShowCategoryOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-gray-600/70 hover:bg-gray-600/80 text-white transition-colors"
+                                  >
+                                    Unassigned
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {showDateOptions && (
+                            <div className="fixed mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 border border-gray-200 dark:border-gray-700 animate-fadeIn">
+                              <div className="text-sm text-white-500">
+                                Date Options:
+                                <div className="flex gap-2 mt-2 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewTodo((prev) => {
+                                        const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                                        return `${withoutDate} *today`.trim();
+                                      });
+                                      setShowDateOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                                  >
+                                    Today
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewTodo((prev) => {
+                                        const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                                        return `${withoutDate} *tomorrow`.trim();
+                                      });
+                                      setShowDateOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                                  >
+                                    Tomorrow
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewTodo((prev) => {
+                                        const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                                        return `${withoutDate} *next week`.trim();
+                                      });
+                                      setShowDateOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                                  >
+                                    Next Week
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewTodo((prev) => {
+                                        const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                                        return `${withoutDate} *next month`.trim();
+                                      });
+                                      setShowDateOptions(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                                  >
+                                    Next Month
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span 
+                          className={`flex-1 text-sm text-white ${todo.completed ? 'line-through text-gray-300' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEditing(todo);
+                          }}
+                        >
+                          {todo.text}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-3 text-xs pr-8">
                         <span className={`flex items-center gap-1.5 text-gray-300 ${getCategoryColor(todo.category)} px-2 py-1 rounded-md`}>
                           {todo.category}
                         </span>
                         {todo.dueDate && (
                           <span className="text-blue-300 bg-black/30 px-2 py-1 rounded-md">
-                            {todo.dueDate}
+                            {new Date(todo.dueDate).toLocaleDateString()}
                           </span>
                         )}
                       </div>
@@ -275,7 +836,7 @@ export default function TodoList() {
                           e.stopPropagation();
                           deleteTodo(todo.id);
                         }}
-                        className="hidden group-hover:block px-2 py-1 text-gray-300 hover:text-red-300 transition-colors"
+                        className="opacity-0 group-hover:opacity-100 absolute right-3 px-2 py-1 text-gray-300 hover:text-red-300 transition-opacity"
                       >
                         ×
                       </button>
@@ -288,78 +849,39 @@ export default function TodoList() {
         );
       case 'categories':
         return (
-          <div className="space-y-8">
-            {['My God', 'Myself', 'My People', 'My Work', 'Maintenance', 'Unassigned'].map((category) => {
-              const categoryTodos = todos.filter(todo => todo.category === category);
-              
-              return (
-                <div key={category} className="mb-8">
-                  <div className={`rounded-t-xl ${getCategoryColor(category as Todo['category'])}`}>
-                    <div className="flex items-center gap-2 p-3">
-                      <button 
-                        onClick={() => toggleSection(category)}
-                        className={`w-4 h-4 text-gray-300 hover:text-white transition-all duration-200 transform ${
-                          collapsedSections[category] ? 'rotate-[-90deg]' : ''
-                        }`}
-                      >
-                        ▼
-                      </button>
-                      <h2 className="text-sm font-medium text-white">
-                        {category}
-                      </h2>
-                      <span className="text-sm text-gray-300">
-                        {categoryTodos.length}
-                      </span>
-                    </div>
-                  </div>
-
-                  <ul className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                    collapsedSections[category] 
-                      ? slideUpVariants.closed
-                      : slideUpVariants.open
-                  }`}>
-                    {categoryTodos.map((todo) => (
-                      <li
-                        key={todo.id}
-                        className={`flex items-center gap-3 p-3 group transition-colors ${getCategoryColor(todo.category)} rounded-lg`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={todo.completed}
-                          onChange={() => toggleTodo(todo.id)}
-                          className="w-4 h-4 border-2 border-gray-300 rounded-md checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
-                        />
-                        <span className={`flex-1 text-sm text-white ${todo.completed ? 'line-through text-gray-300' : ''}`}>
-                          {todo.text}
-                        </span>
-                        <div className="flex items-center gap-3 text-xs">
-                          <span className={`flex items-center gap-1.5 text-gray-300 ${getPriorityColor(todo.priority)} px-2 py-1 rounded-md`}>
-                            {todo.priority}
-                          </span>
-                          {todo.dueDate && (
-                            <span className="text-blue-300 bg-black/30 px-2 py-1 rounded-md">
-                              {todo.dueDate}
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteTodo(todo.id);
-                          }}
-                          className="hidden group-hover:block px-2 py-1 text-gray-300 hover:text-red-300 transition-colors"
-                        >
-                          ×
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
+          <CategoryView
+            todos={todos}
+            onToggle={toggleTodo}
+            onDelete={deleteTodo}
+            onSelect={setSelectedTodo}
+            getPriorityColor={getPriorityColor}
+            getCategoryColor={getCategoryColor}
+            editingTodo={editingTodo}
+            editText={editText}
+            handleEditSubmit={handleEditSubmit}
+            handleEditInputChange={handleEditInputChange}
+            startEditing={startEditing}
+          />
         );
-      // Add other view implementations as needed
+      case 'date':
+        return (
+          <DateView
+            todos={todos}
+            onToggle={toggleTodo}
+            onDelete={deleteTodo}
+            onSelect={setSelectedTodo}
+            getPriorityColor={getPriorityColor}
+            getCategoryColor={getCategoryColor}
+            editingTodo={editingTodo}
+            editText={editText}
+            handleEditSubmit={handleEditSubmit}
+            handleEditInputChange={handleEditInputChange}
+            startEditing={startEditing}
+            showPriorityOptions={showPriorityOptions}
+            showCategoryOptions={showCategoryOptions}
+            showDateOptions={showDateOptions}
+          />
+        );
       default:
         return null;
     }
@@ -370,7 +892,7 @@ export default function TodoList() {
       <Sidebar currentView={currentView} onViewChange={setCurrentView} />
       
       <div className="flex-1 overflow-auto p-6">
-        <form onSubmit={addTodo} className="mb-6">
+        <form onSubmit={handleSubmit} className="mb-6">
           <div className="flex gap-2 mb-8 items-center relative">
             <input
               type="text"
@@ -380,11 +902,11 @@ export default function TodoList() {
                 setNewPriority('Unassigned');
                 setNewCategory('Unassigned');
               }}
-              placeholder="Add task (use ! for priority, ~ for category)"
+              placeholder="Add task (use ! for priority, ~ for category, * for date)"
               className={`flex-1 px-4 py-3 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 placeholder:text-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${getPriorityColor(newPriority)}`}
             />
-            {showPriorityOptions && (
-              <div className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-10 border border-gray-200 dark:border-gray-700 animate-fadeIn">
+            {!editingTodo && showPriorityOptions && (
+              <div className="fixed mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 border border-gray-200 dark:border-gray-700 animate-fadeIn">
                 <div className="text-sm text-white-500">
                   Priority Options:
                   <div className="flex gap-2 mt-2">
@@ -422,8 +944,8 @@ export default function TodoList() {
                 </div>
               </div>
             )}
-            {showCategoryOptions && (
-              <div className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-10 border border-gray-200 dark:border-gray-700 animate-fadeIn">
+            {!editingTodo && showCategoryOptions && (
+              <div className="fixed mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 border border-gray-200 dark:border-gray-700 animate-fadeIn">
                 <div className="text-sm text-white-500">
                   Category Options:
                   <div className="flex gap-2 mt-2 flex-wrap">
@@ -491,6 +1013,67 @@ export default function TodoList() {
                 </div>
               </div>
             )}
+            {!editingTodo && showDateOptions && (
+              <div className="fixed mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 border border-gray-200 dark:border-gray-700 animate-fadeIn">
+                <div className="text-sm text-white-500">
+                  Date Options:
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewTodo((prev) => {
+                          const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                          return `${withoutDate} *today`.trim();
+                        });
+                        setShowDateOptions(false);
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewTodo((prev) => {
+                          const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                          return `${withoutDate} *tomorrow`.trim();
+                        });
+                        setShowDateOptions(false);
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                    >
+                      Tomorrow
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewTodo((prev) => {
+                          const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                          return `${withoutDate} *next week`.trim();
+                        });
+                        setShowDateOptions(false);
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                    >
+                      Next Week
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewTodo((prev) => {
+                          const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
+                          return `${withoutDate} *next month`.trim();
+                        });
+                        setShowDateOptions(false);
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-blue-600/70 hover:bg-blue-600/80 text-white transition-colors"
+                    >
+                      Next Month
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </form>
         
@@ -498,8 +1081,9 @@ export default function TodoList() {
       </div>
 
       <TaskDetails 
-        todo={selectedTodo} 
+        todo={getLatestTodo(selectedTodo?.id)}
         onClose={() => setSelectedTodo(null)} 
+        onUpdate={updateTodo}
       />
     </div>
   );
