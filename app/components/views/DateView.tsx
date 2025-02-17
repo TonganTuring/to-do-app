@@ -3,14 +3,14 @@ import { isWithinInterval, addDays, addMonths, parseISO, isAfter } from 'date-fn
 
 interface DateViewProps {
   todos: Todo[];
-  onToggle: (id: number) => void;
-  onDelete: (id: number) => void;
+  onToggle: (id: string) => void;
+  onDelete: (id: string) => void;
   onSelect: (todo: Todo) => void;
   getPriorityColor: (priority: Todo['priority']) => string;
   getCategoryColor: (category: Todo['category']) => string;
-  editingTodo: number | null;
+  editingTodo: string | null;
   editText: string;
-  handleEditSubmit: (id: number) => void;
+  handleEditSubmit: (id: string) => void;
   handleEditInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   startEditing: (todo: Todo) => void;
 }

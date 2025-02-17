@@ -2,17 +2,20 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../lib/firebase/auth-context';
+import { addTodo } from '../lib/firebase/todos';
 
 export default function LandingPage() {
   const [task, setTask] = useState('');
   const router = useRouter();
+  const { user, signInWithGoogle } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (task.trim()) {
-      // Store the initial task in localStorage
+    if (!user || !task.trim()) return;
+
+    try {
       const initialTodo = {
-        id: Date.now(),
         text: task,
         completed: false,
         priority: 'Unassigned',
@@ -20,8 +23,11 @@ export default function LandingPage() {
         dueDate: null,
         archivedAt: null,
       };
-      localStorage.setItem('initialTodo', JSON.stringify(initialTodo));
+
+      await addTodo(user.uid, initialTodo);
       router.push('/todo');
+    } catch (error) {
+      console.error('Error creating initial todo:', error);
     }
   };
 
@@ -39,19 +45,29 @@ export default function LandingPage() {
           What you tryna work on today?
         </h1>
         
-        <form onSubmit={handleSubmit} className="w-full animate-slide-up">
-          <input
-            type="text"
-            value={task}
-            onChange={(e) => setTask(e.target.value)}
-            placeholder="Put your tasks here..."
-            className="w-full px-6 py-4 text-lg bg-gray-800/50 backdrop-blur-sm 
-                     rounded-lg border border-gray-700/50 text-white
-                     placeholder:text-gray-400 focus:outline-none focus:ring-2 
-                     focus:ring-blue-500/50 focus:border-transparent transition-all
-                     shadow-lg animate-float-delayed"
-          />
-        </form>
+        {!user ? (
+          <button
+            onClick={signInWithGoogle}
+            className="mt-4 px-6 py-3 bg-white/10 hover:bg-white/20 
+                     rounded-lg text-white transition-colors w-full"
+          >
+            Sign in with Google
+          </button>
+        ) : (
+          <form onSubmit={handleSubmit} className="w-full animate-slide-up">
+            <input
+              type="text"
+              value={task}
+              onChange={(e) => setTask(e.target.value)}
+              placeholder="Put your tasks here..."
+              className="w-full px-6 py-4 text-lg bg-gray-800/50 backdrop-blur-sm 
+                       rounded-lg border border-gray-700/50 text-white
+                       placeholder:text-gray-400 focus:outline-none focus:ring-2 
+                       focus:ring-blue-500/50 focus:border-transparent transition-all
+                       shadow-lg animate-float-delayed"
+            />
+          </form>
+        )}
       </div>
     </div>
   );

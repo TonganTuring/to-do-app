@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import TaskDetails from './TaskDetails';
 import DateView from './views/DateView';
 import CategoryView from './views/CategoryView';
 import ArchiveView from './views/ArchiveView';
 import { parseDateExpression } from '../utils/dateUtils';
+import { useAuth } from '../lib/firebase/auth-context';
+import { getUserTodos, addTodo, updateTodo, deleteTodo } from '../lib/firebase/todos';
 
 interface Todo {
   id: number;
@@ -24,6 +26,7 @@ const slideUpVariants = {
 };
 
 export default function TodoList() {
+  const { user } = useAuth();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTodo, setNewTodo] = useState('');
   const [newPriority, setNewPriority] = useState<Todo['priority']>('Unassigned');
@@ -36,6 +39,25 @@ export default function TodoList() {
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [editingTodo, setEditingTodo] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
+
+  // Load todos when user signs in
+  useEffect(() => {
+    if (user) {
+      loadTodos();
+    } else {
+      setTodos([]);
+    }
+  }, [user]);
+
+  const loadTodos = async () => {
+    if (!user) return;
+    try {
+      const userTodos = await getUserTodos(user.uid);
+      setTodos(userTodos);
+    } catch (error) {
+      console.error('Error loading todos:', error);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -149,56 +171,75 @@ export default function TodoList() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTodo.trim()) return;
+    if (!user || !newTodo.trim()) return;
 
-    let dueDate: Date | null = null;
-    let todoText = newTodo;
+    try {
+      const todo = {
+        text: newTodo,
+        completed: false,
+        priority: newPriority,
+        category: newCategory,
+        dueDate: null,
+        archivedAt: null,
+      };
 
-    // Check for date pattern anywhere in the text
-    const dateMatch = todoText.match(/\*([\w\s]+)/);
-    if (dateMatch) {
-      const datePart = dateMatch[1].trim();
-      dueDate = parseDateExpression(datePart);
-      todoText = todoText.replace(/\*[\w\s]+/, '').trim();
+      const addedTodo = await addTodo(user.uid, todo);
+      setTodos(prev => [addedTodo, ...prev]);
+      setNewTodo('');
+      setNewPriority('Unassigned');
+      setNewCategory('Unassigned');
+    } catch (error) {
+      console.error('Error adding todo:', error);
     }
-
-    const newTodoItem = {
-      id: Date.now(),
-      text: todoText,
-      completed: false,
-      priority: newPriority,
-      category: newCategory,
-      dueDate: dueDate ? dueDate.toISOString() : null,
-      archivedAt: null,
-    };
-
-    setTodos([...todos, newTodoItem]);
-    setNewTodo('');
-    setNewPriority('Unassigned');
-    setNewCategory('Unassigned');
-    setShowPriorityOptions(false);
-    setShowCategoryOptions(false);
-    setShowDateOptions(false);
   };
 
-  const toggleTodo = (id: number) => {
-    setTodos(
-      todos.map((todo) =>
-        todo.id === id
-          ? {
-              ...todo,
-              completed: !todo.completed,
-              archivedAt: !todo.completed ? new Date().toISOString() : null,
-            }
-          : todo
-      )
-    );
+  const toggleTodo = async (todoId: string) => {
+    const todo = todos.find(t => t.id === todoId);
+    if (!todo) return;
+
+    try {
+      await updateTodo(todoId, { completed: !todo.completed });
+      setTodos(prev => prev.map(t => 
+        t.id === todoId ? { ...t, completed: !t.completed } : t
+      ));
+    } catch (error) {
+      console.error('Error toggling todo:', error);
+    }
   };
 
-  const deleteTodo = (id: number) => {
-    setTodos(todos.filter((todo) => todo.id !== id));
+  const handleEditSubmit = async (todoId: string) => {
+    if (!editText.trim()) return;
+
+    try {
+      await updateTodo(todoId, { 
+        text: editText,
+        priority: newPriority,
+        category: newCategory,
+      });
+      setTodos(prev => prev.map(t => 
+        t.id === todoId ? { 
+          ...t, 
+          text: editText,
+          priority: newPriority,
+          category: newCategory,
+        } : t
+      ));
+      setEditingTodo(null);
+      setEditText('');
+    } catch (error) {
+      console.error('Error updating todo:', error);
+    }
+  };
+
+  const deleteTodoItem = async (todoId: string) => {
+    try {
+      await deleteTodo(todoId);
+      setTodos(prev => prev.filter(t => t.id !== todoId));
+    } catch (error) {
+      console.error('Error deleting todo:', error);
+    }
   };
 
   const groupedTodos = todos.reduce((acc, todo) => {
@@ -261,41 +302,7 @@ export default function TodoList() {
     setNewCategory(todo.category);
   };
 
-  const handleEditSubmit = (id: number) => {
-    setTodos(todos.map(todo => {
-      if (todo.id === id) {
-        let dueDate: Date | null = null;
-        let todoText = editText;
-
-        // Check for date pattern anywhere in the text
-        const dateMatch = todoText.match(/\*([\w\s]+)/);
-        if (dateMatch) {
-          const datePart = dateMatch[1].trim();
-          dueDate = parseDateExpression(datePart);
-          todoText = todoText.replace(/\*[\w\s]+/, '').trim();
-        }
-
-        return {
-          ...todo,
-          text: todoText,
-          priority: newPriority,
-          category: newCategory,
-          dueDate: dueDate ? dueDate.toISOString() : todo.dueDate,
-        };
-      }
-      return todo;
-    }));
-    
-    setEditingTodo(null);
-    setEditText('');
-    setNewPriority('Unassigned');
-    setNewCategory('Unassigned');
-    setShowPriorityOptions(false);
-    setShowCategoryOptions(false);
-    setShowDateOptions(false);
-  };
-
-  const updateTodo = (id: number, updates: Partial<Todo>) => {
+  const updateTodoItem = (id: number, updates: Partial<Todo>) => {
     setTodos(todos.map(todo => 
       todo.id === id ? { ...todo, ...updates } : todo
     ));
@@ -313,7 +320,7 @@ export default function TodoList() {
           <ArchiveView
             todos={todos}
             onToggle={toggleTodo}
-            onDelete={deleteTodo}
+            onDelete={deleteTodoItem}
             onSelect={setSelectedTodo}
             getPriorityColor={getPriorityColor}
             getCategoryColor={getCategoryColor}
@@ -342,7 +349,7 @@ export default function TodoList() {
                 <input
                   type="checkbox"
                   checked={todo.completed}
-                  onChange={() => toggleTodo(todo.id)}
+                  onChange={() => toggleTodo(todo.id.toString())}
                   className="w-4 h-4 border-2 border-gray-300 rounded-md checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
                 />
                 {editingTodo === todo.id ? (
@@ -350,14 +357,14 @@ export default function TodoList() {
                     <form 
                       onSubmit={(e) => {
                         e.preventDefault();
-                        handleEditSubmit(todo.id);
+                        handleEditSubmit(todo.id.toString());
                       }}
                     >
                       <input
                         type="text"
                         value={editText}
                         onChange={handleEditInputChange}
-                        onBlur={() => handleEditSubmit(todo.id)}
+                        onBlur={() => handleEditSubmit(todo.id.toString())}
                         autoFocus
                         className="w-full px-2 py-1 bg-transparent text-sm text-white border-b border-white/20 focus:outline-none focus:border-white/40"
                       />
@@ -556,7 +563,7 @@ export default function TodoList() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    deleteTodo(todo.id);
+                    deleteTodoItem(todo.id.toString());
                   }}
                   className="opacity-0 group-hover:opacity-100 absolute right-3 px-2 py-1 text-gray-300 hover:text-red-300 transition-opacity"
                 >
@@ -610,7 +617,7 @@ export default function TodoList() {
                       <input
                         type="checkbox"
                         checked={todo.completed}
-                        onChange={() => toggleTodo(todo.id)}
+                        onChange={() => toggleTodo(todo.id.toString())}
                         className="w-4 h-4 border-2 border-gray-300 rounded-md checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
                       />
                       {editingTodo === todo.id ? (
@@ -618,14 +625,14 @@ export default function TodoList() {
                           <form 
                             onSubmit={(e) => {
                               e.preventDefault();
-                              handleEditSubmit(todo.id);
+                              handleEditSubmit(todo.id.toString());
                             }}
                           >
                             <input
                               type="text"
                               value={editText}
                               onChange={handleEditInputChange}
-                              onBlur={() => handleEditSubmit(todo.id)}
+                              onBlur={() => handleEditSubmit(todo.id.toString())}
                               autoFocus
                               className="w-full px-2 py-1 bg-transparent text-sm text-white border-b border-white/20 focus:outline-none focus:border-white/40"
                             />
@@ -824,7 +831,7 @@ export default function TodoList() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteTodo(todo.id);
+                          deleteTodoItem(todo.id.toString());
                         }}
                         className="opacity-0 group-hover:opacity-100 absolute right-3 px-2 py-1 text-gray-300 hover:text-red-300 transition-opacity"
                       >
@@ -842,7 +849,7 @@ export default function TodoList() {
           <CategoryView
             todos={todos}
             onToggle={toggleTodo}
-            onDelete={deleteTodo}
+            onDelete={deleteTodoItem}
             onSelect={setSelectedTodo}
             getPriorityColor={getPriorityColor}
             getCategoryColor={getCategoryColor}
@@ -858,7 +865,7 @@ export default function TodoList() {
           <DateView
             todos={todos}
             onToggle={toggleTodo}
-            onDelete={deleteTodo}
+            onDelete={deleteTodoItem}
             onSelect={setSelectedTodo}
             getPriorityColor={getPriorityColor}
             getCategoryColor={getCategoryColor}
@@ -1070,7 +1077,7 @@ export default function TodoList() {
       <TaskDetails 
         todo={getLatestTodo(selectedTodo?.id ?? null)}
         onClose={() => setSelectedTodo(null)} 
-        onUpdate={updateTodo}
+        onUpdate={updateTodoItem}
       />
     </div>
   );
