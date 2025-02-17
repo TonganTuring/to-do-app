@@ -13,15 +13,44 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Initialize Firebase
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// Validate config
+const validateConfig = () => {
+  const requiredFields = [
+    'apiKey',
+    'authDomain',
+    'projectId',
+    'storageBucket',
+    'messagingSenderId',
+    'appId'
+  ];
+  
+  const missingFields = requiredFields.filter(field => !firebaseConfig[field]);
+  
+  if (missingFields.length > 0) {
+    throw new Error(`Missing required Firebase config fields: ${missingFields.join(', ')}`);
+  }
+};
+
+let app;
+try {
+  validateConfig();
+  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+} catch (error) {
+  console.error('Firebase initialization error:', error);
+  throw error;
+}
+
 const auth = getAuth(app);
 const db = getFirestore(app);
 
 // Only initialize analytics on the client side
 let analytics = null;
 if (typeof window !== 'undefined') {
-  analytics = getAnalytics(app);
+  try {
+    analytics = getAnalytics(app);
+  } catch (error) {
+    console.warn('Firebase Analytics initialization error:', error);
+  }
 }
 
 export { app, auth, db, analytics }; 

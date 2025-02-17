@@ -27,22 +27,40 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-    });
+    try {
+      const unsubscribe = onAuthStateChanged(auth, 
+        (user) => {
+          setUser(user);
+          setLoading(false);
+          setError(null);
+        },
+        (error) => {
+          console.error('Auth state change error:', error);
+          setError(error);
+          setLoading(false);
+        }
+      );
 
-    return () => unsubscribe();
+      return () => unsubscribe();
+    } catch (error) {
+      console.error('Auth subscription error:', error);
+      setError(error as Error);
+      setLoading(false);
+    }
   }, []);
 
   const signInWithGoogle = async () => {
     try {
+      setError(null);
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error('Error signing in with Google:', error);
+      setError(error as Error);
+      throw error;
     }
   };
 
