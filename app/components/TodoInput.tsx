@@ -3,6 +3,7 @@ import { Todo } from '../types/todo';
 import PriorityOptions from './options/PriorityOptions';
 import CategoryOptions from './options/CategoryOptions';
 import DateOptions from './options/DateOptions';
+import { parseDateExpression } from '../utils/dateUtils';
 
 interface TodoInputProps {
   onSubmit: (todo: Omit<Todo, 'id' | 'completed'>) => void;
@@ -93,6 +94,7 @@ export default function TodoInput({ onSubmit, getPriorityColor }: TodoInputProps
       priority: newPriority,
       category: newCategory,
       dueDate: dueDate ? dueDate.toISOString() : null,
+      archivedAt: null,
     });
 
     setNewTodo('');
@@ -129,7 +131,7 @@ export default function TodoInput({ onSubmit, getPriorityColor }: TodoInputProps
         )}
         {showCategoryOptions && (
           <CategoryOptions
-            onSelect={(category) => {
+            onSelect={(category: Todo['category']) => {
               setNewCategory(category);
               setShowCategoryOptions(false);
             }}
@@ -137,7 +139,7 @@ export default function TodoInput({ onSubmit, getPriorityColor }: TodoInputProps
         )}
         {showDateOptions && (
           <DateOptions
-            onSelect={(dateText) => {
+            onSelect={(dateText: string) => {
               setNewTodo((prev) => {
                 const withoutDate = prev.replace(/\*[\w\s]+/, '').trim();
                 return `${withoutDate} *${dateText}`.trim();
