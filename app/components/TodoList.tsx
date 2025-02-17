@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import TaskDetails from './TaskDetails';
 import { parse, addDays, addWeeks, addMonths, isValid, parseISO } from 'date-fns';
@@ -19,6 +19,10 @@ interface Todo {
   archivedAt: string | null;
 }
 
+interface TodoListProps {
+  initialTask?: string;
+}
+
 const slideUpVariants = {
   open: 'max-h-[1000px] opacity-100',
   closed: 'max-h-0 opacity-0'
@@ -33,7 +37,7 @@ const CATEGORIES = {
   'Unassigned': 'gray'
 } as const;
 
-export default function TodoList() {
+export default function TodoList({ initialTask }: TodoListProps) {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTodo, setNewTodo] = useState('');
   const [newPriority, setNewPriority] = useState<Todo['priority']>('Unassigned');
@@ -46,6 +50,13 @@ export default function TodoList() {
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [editingTodo, setEditingTodo] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
+
+  useEffect(() => {
+    if (initialTask) {
+      setNewTodo(initialTask);
+      handleSubmit(new Event('submit') as any);
+    }
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
