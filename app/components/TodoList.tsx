@@ -1,24 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import TaskDetails from './TaskDetails';
 import DateView from './views/DateView';
 import CategoryView from './views/CategoryView';
 import ArchiveView from './views/ArchiveView';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { parseDateExpression } from '../utils/dateUtils';
 import { useAuth } from '../lib/firebase/auth-context';
 import { getUserTodos, addTodo, updateTodo, deleteTodo } from '../lib/firebase/todos';
-
-interface Todo {
-  id: number;
-  text: string;
-  completed: boolean;
-  priority: 'High' | 'Medium' | 'Low' | 'Unassigned';
-  category: 'My God' | 'Myself' | 'My People' | 'My Work' | 'Maintenance' | 'Unassigned';
-  dueDate: string | null;
-  archivedAt: string | null;
-}
+import { Todo } from '../types/todo';
 
 const slideUpVariants = {
   open: 'max-h-[1000px] opacity-100',
@@ -37,19 +29,10 @@ export default function TodoList() {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [currentView, setCurrentView] = useState<'inbox' | 'priorities' | 'categories' | 'date' | 'archive'>('inbox');
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
-  const [editingTodo, setEditingTodo] = useState<number | null>(null);
+  const [editingTodo, setEditingTodo] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
 
-  // Load todos when user signs in
-  useEffect(() => {
-    if (user) {
-      loadTodos();
-    } else {
-      setTodos([]);
-    }
-  }, [user]);
-
-  const loadTodos = async () => {
+  const loadTodos = useCallback(async () => {
     if (!user) return;
     try {
       const userTodos = await getUserTodos(user.uid);
@@ -57,7 +40,15 @@ export default function TodoList() {
     } catch (error) {
       console.error('Error loading todos:', error);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadTodos();
+    } else {
+      setTodos([]);
+    }
+  }, [user, loadTodos]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -183,6 +174,8 @@ export default function TodoList() {
         category: newCategory,
         dueDate: null,
         archivedAt: null,
+        userId: user.uid,
+        createdAt: new Date().toISOString()
       };
 
       const addedTodo = await addTodo(user.uid, todo);
@@ -296,19 +289,19 @@ export default function TodoList() {
   };
 
   const startEditing = (todo: Todo) => {
-    setEditingTodo(todo.id);
+    setEditingTodo(todo.id.toString());
     setEditText(todo.text);
     setNewPriority(todo.priority);
     setNewCategory(todo.category);
   };
 
-  const updateTodoItem = (id: number, updates: Partial<Todo>) => {
+  const updateTodoItem = (id: string, updates: Partial<Todo>) => {
     setTodos(todos.map(todo => 
       todo.id === id ? { ...todo, ...updates } : todo
     ));
   };
 
-  const getLatestTodo = (todoId: number | null) => {
+const getLatestTodo = (todoId: string | null) => {
     if (!todoId) return null;
     return todos.find(t => t.id === todoId) || null;
   };
@@ -897,7 +890,7 @@ export default function TodoList() {
                 setNewCategory('Unassigned');
               }}
               placeholder="Add task (use ! for priority, ~ for category, * for date)"
-              className={`flex-1 px-4 py-3 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 placeholder:text-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${getPriorityColor(newPriority)}`}
+              className="w-full px-4 py-3 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 placeholder:text-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-800/70"
             />
             {!editingTodo && showPriorityOptions && (
               <div className="fixed mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 border border-gray-200 dark:border-gray-700 animate-fadeIn">

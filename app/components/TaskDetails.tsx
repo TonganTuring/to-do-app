@@ -8,7 +8,7 @@ import { parseDateExpression } from '../utils/dateUtils';
 interface TaskDetailsProps {
   todo: Todo | null;
   onClose: () => void;
-  onUpdate: (id: number, updates: Partial<Todo>) => void;
+  onUpdate: (id: string, updates: Partial<Todo>) => void;
 }
 
 export default function TaskDetails({ todo, onClose, onUpdate }: TaskDetailsProps) {

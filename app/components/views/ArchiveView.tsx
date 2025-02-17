@@ -3,8 +3,8 @@ import TodoItem from '../TodoItem';
 
 interface ArchiveViewProps {
   todos: Todo[];
-  onToggle: (id: number) => void;
-  onDelete: (id: number) => void;
+  onToggle: (id: string) => void;
+  onDelete: (id: string) => void;
   onSelect: (todo: Todo) => void;
   getPriorityColor: (priority: Todo['priority']) => string;
   getCategoryColor: (category: Todo['category']) => string;

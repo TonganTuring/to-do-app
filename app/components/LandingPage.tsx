@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../lib/firebase/auth-context';
 import { addTodo } from '../lib/firebase/todos';
+import { Todo } from '../types/todo';
 
 export default function LandingPage() {
   const [task, setTask] = useState('');
@@ -22,9 +23,11 @@ export default function LandingPage() {
         category: 'Unassigned',
         dueDate: null,
         archivedAt: null,
+        userId: user.uid,
+        createdAt: new Date().toISOString()
       };
 
-      await addTodo(user.uid, initialTodo);
+      await addTodo(user.uid, initialTodo as Todo);
       router.push('/todo');
     } catch (error) {
       console.error('Error creating initial todo:', error);

@@ -4,13 +4,14 @@ import PriorityOptions from './options/PriorityOptions';
 import CategoryOptions from './options/CategoryOptions';
 import DateOptions from './options/DateOptions';
 import { parseDateExpression } from '../utils/dateUtils';
-
+import { useAuth } from '../lib/firebase/auth-context';
 interface TodoInputProps {
   onSubmit: (todo: Omit<Todo, 'id' | 'completed'>) => void;
   getPriorityColor: (priority: Todo['priority']) => string;
 }
 
 export default function TodoInput({ onSubmit, getPriorityColor }: TodoInputProps) {
+  const { user } = useAuth();
   const [newTodo, setNewTodo] = useState('');
   const [newPriority, setNewPriority] = useState<Todo['priority']>('Unassigned');
   const [newCategory, setNewCategory] = useState<Todo['category']>('Unassigned');
@@ -95,6 +96,8 @@ export default function TodoInput({ onSubmit, getPriorityColor }: TodoInputProps
       category: newCategory,
       dueDate: dueDate ? dueDate.toISOString() : null,
       archivedAt: null,
+      userId: user?.uid || '',
+      createdAt: new Date().toISOString(),
     });
 
     setNewTodo('');

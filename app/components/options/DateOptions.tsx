@@ -1,5 +1,5 @@
 interface DateOptionsProps {
-  onSelect: (dateText: string) => void;
+  onSelect: (dateOption: string) => void;
 }
 
 export default function DateOptions({ onSelect }: DateOptionsProps) {
